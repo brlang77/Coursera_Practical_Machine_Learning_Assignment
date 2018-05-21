@@ -1,0 +1,94 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "brlang77"
+date: "May 21, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+The goal of your project is to predict the manner in which they did the exercise, using the "classe" variable in the training set. 
+
+You should create a report describing how you built your model, 
+how you used cross validation, what you think the expected out of sample error is, 
+and why you made the choices you did. 
+
+The model developed was used to predict 20 different test cases.
+Source:  <http://groupware.les.inf.puc-rio.br/har> 
+
+##Data Load and Exploration
+Data has been downloaded to local drive.
+```{r dataprep}
+setwd("~/R/Machine Learning Coursera")
+training<-read.csv("~/R/Machine Learning Coursera/pml-training.csv",header=TRUE,sep=",")
+```
+The training data frame is 19,622 observations of 160 variables.  Performing some basic data exploration, the data set appears to have a large number of variables which are blank or "NA".  Also there are a number of fields not suitable for prediction such as timestamps and subject names which should be removed.
+
+Further review of the original authors' work confirmed that some variable selection to remove noise/bad data is required.
+<http://web.archive.org/web/20170519033209/http://groupware.les.inf.puc-rio.br:80/public/papers/2013.Velloso.QAR-WLE.pdf>
+
+The exercise classification variable (classe) is a factor variable with 5 levels.
+```{r classe}
+summary(training$classe)
+```
+##Data Cleaning
+First, as suggested by original authors and review of fields with lots of NAs or blanks.  All fields reltaed to kurtosis, skewness, or yaw represent missing fields (or no variance).
+
+```{r colnames}
+kurt<-grep("kurtosis",colnames(training))
+skew<-grep("skewness",colnames(training))
+yaw<-grep("yaw",colnames(training))
+
+##create list of columns to exclude
+excl<-c(kurt,skew,yaw)
+temp<-training[,-excl]
+```
+Several fields not considered predictors were removed.
+```{r names2}
+names(temp[,c(1:7)])
+temp<-temp[,-c(1:7)]
+```
+
+Further review (using "summary"" function) found that the previous stemps did not capture all fields with NA's, so a systematic approach to removing these was added.
+
+Any column with at least 1 NA was removed from the training (temp) data set.
+
+```{r NAs}
+##For example this field is almost all NA
+sum(is.na(training$max_roll_belt))
+temp<-temp[,colSums(is.na(temp))==0]
+dim(temp)
+```
+
+This left us with 56 variables from the original 160 variables.
+
+##Model Development
+Based on review of published literature which cited "characteristic noise in the sensor data", a random forest model was chosen.  Due to performance concerns for running a random forest model on a PC using almost 20k observations and 56 variables, a kmeans cross validation approach with 5 samples was used instead of the default bootstrapping on 25 samples.
+
+Performance was first tested on a 1,000 record subset of the training data to assess performance, which took several minutes to complete on just the 1,000 records.
+
+#Data used for performance test (not shown)
+small<-temp[sample(dim(temp)[[1]],size=1000),]
+
+#Random forest model
+```{r rfmodel}
+library(caret)
+modrf<-train(classe~.,data=temp,method="rf",trControl= 
+               trainControl(method="cv",
+                            number = 5)
+)
+modrf
+```
+
+In looking at the final model...
+```{r finalmodel}
+modrf$finalModel
+```
+
+The out of bounds estimate of error rate is just 0.47%.
+
+This model was used for prediction on the testing data with a result from the quiz with accuracy of 20 out of 20.
+
